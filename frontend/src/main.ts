@@ -69,7 +69,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     skip: 'Skip / Keep As Is',
     chooseImage: 'Choose Screenshot...',
     imageSelected: 'Image Attached ✓',
-    checkingIframes: 'Checking live website frames...'
+    checkingIframes: 'Checking live website frames...',
+    zoomLabel: 'Mockup Zoom',
+    positionLabel: 'Image Position',
+    posTop: 'Top (Header visible)',
+    posCenter: 'Center',
+    posBottom: 'Bottom',
+    fullCoverHint: 'Image covers 100% of the mockup screen with zero borders.'
   },
   de: {
     appTitle: 'Reel Studio',
@@ -116,7 +122,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     skip: 'Überspringen',
     chooseImage: 'Screenshot wählen...',
     imageSelected: 'Bild ausgewählt ✓',
-    checkingIframes: 'Prüfe Webseiten-Iframes...'
+    checkingIframes: 'Prüfe Webseiten-Iframes...',
+    zoomLabel: 'Mockup-Zoom',
+    positionLabel: 'Bildposition',
+    posTop: 'Oben (Kopfzeile sichtbar)',
+    posCenter: 'Zentriert',
+    posBottom: 'Unten',
+    fullCoverHint: 'Das Bild wird gezoomt, um den Mockup-Bildschirm randlos auszufüllen.'
   },
   ar: {
     appTitle: 'ريل ستوديو',
@@ -163,7 +175,13 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     skip: 'تخطي / الإبقاء كما هي',
     chooseImage: 'اختيار صورة لقطة الشاشة...',
     imageSelected: 'تم إرفاق الصورة ✓',
-    checkingIframes: 'جارٍ فحص مواقع الريل...'
+    checkingIframes: 'جارٍ فحص مواقع الريل...',
+    zoomLabel: 'مستوى التكبير (Zoom)',
+    positionLabel: 'موضع الصورة',
+    posTop: 'أعلى (إظهار رأس الصفحة)',
+    posCenter: 'وسط',
+    posBottom: 'أسفل',
+    fullCoverHint: 'تغطي الصورة شاشة النموذج بالكامل دون أي حواف فارغة باستخدام التكبير.'
   }
 };
 
@@ -349,17 +367,58 @@ async function checkReelIframesAndPrompt(htmlPath: string) {
   }
 }
 
+function toSafeId(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'ifr_' + Math.abs(hash);
+}
+
 function renderIframeModal(blockedItems: iframe.CheckResult[]) {
   const container = $('#iframeBlockList');
   container.innerHTML = '';
   const t = TRANSLATIONS[currentLang];
+
+  const getUrlState = (url: string) => {
+    const raw = iframeReplacements[url];
+    let img = '';
+    let zoom = 1.0;
+    let pos = 'top center';
+    if (raw) {
+      try {
+        const p = JSON.parse(raw);
+        if (p && typeof p === 'object') {
+          img = p.image || '';
+          zoom = typeof p.zoom === 'number' ? p.zoom : 1.0;
+          pos = p.position || 'top center';
+        } else {
+          img = raw;
+        }
+      } catch {
+        img = raw;
+      }
+    }
+    return { img, zoom, pos };
+  };
+
+  const updateReplacement = (url: string, img: string, zoom: number, pos: string) => {
+    if (!img) return;
+    iframeReplacements[url] = JSON.stringify({
+      image: img,
+      zoom: zoom,
+      position: pos
+    });
+  };
 
   blockedItems.forEach(item => {
     const row = document.createElement('div');
     row.className = 'iframe-block-item';
 
     const safeUrl = item.url;
-    const existingReplacement = iframeReplacements[safeUrl];
+    const { img: imgPath, zoom: zoomVal, pos: posVal } = getUrlState(safeUrl);
+    const safeId = toSafeId(safeUrl);
 
     row.innerHTML = `
       <div class="iframe-header">
@@ -369,15 +428,38 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
         </div>
       </div>
       <div class="iframe-upload-row">
-        <div class="replacement-preview" id="preview-${btoa(safeUrl).replace(/=/g, '')}">
-          ${existingReplacement ? `<img src="${existingReplacement}">` : '<span style="font-size:24px">🖼️</span>'}
+        <div class="replacement-preview" id="preview-${safeId}">
+          ${imgPath ? `<img src="file:///${imgPath.replace(/\\/g, '/')}" style="transform: scale(${zoomVal}); transform-origin: ${posVal}; object-position: ${posVal};">` : '<span style="font-size:24px">🖼️</span>'}
         </div>
-        <div>
-          <button type="button" class="btn secondary small" data-pick-img="${safeUrl}">
-            ${t.chooseImage}
-          </button>
-          <div id="badge-${btoa(safeUrl).replace(/=/g, '')}">
-            ${existingReplacement ? `<span class="iframe-mockup-badge">${t.imageSelected}</span>` : ''}
+        <div class="iframe-controls">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button type="button" class="btn secondary small" data-pick-img="${safeUrl}">
+              ${t.chooseImage}
+            </button>
+            <div id="badge-${safeId}">
+              ${imgPath ? `<span class="iframe-mockup-badge">${t.imageSelected}</span>` : ''}
+            </div>
+          </div>
+
+          <div class="iframe-control-field">
+            <label>${t.zoomLabel}</label>
+            <div class="zoom-slider-row">
+              <input type="range" class="zoom-slider" data-url="${safeUrl}" data-id="${safeId}" min="1.0" max="2.5" step="0.05" value="${zoomVal}">
+              <span class="zoom-val-badge" id="zoom-val-${safeId}">${Math.round(zoomVal * 100)}%</span>
+            </div>
+          </div>
+
+          <div class="iframe-control-field">
+            <label>${t.positionLabel}</label>
+            <select class="pos-select" data-url="${safeUrl}" data-id="${safeId}">
+              <option value="top center" ${posVal === 'top center' ? 'selected' : ''}>${t.posTop}</option>
+              <option value="center center" ${posVal === 'center center' ? 'selected' : ''}>${t.posCenter}</option>
+              <option value="bottom center" ${posVal === 'bottom center' ? 'selected' : ''}>${t.posBottom}</option>
+            </select>
+          </div>
+
+          <div class="mockup-cover-hint">
+            ✨ ${t.fullCoverHint}
           </div>
         </div>
       </div>
@@ -386,6 +468,7 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
     container.appendChild(row);
   });
 
+  // Image picker event listeners
   container.querySelectorAll('[data-pick-img]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const urlKey = (btn as HTMLElement).dataset.pickImg;
@@ -393,11 +476,14 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
       try {
         const imgPath = await SelectMockupImage();
         if (imgPath) {
-          iframeReplacements[urlKey] = imgPath;
-          const safeId = btoa(urlKey).replace(/=/g, '');
+          const safeId = toSafeId(urlKey);
+          const state = getUrlState(urlKey);
+          state.img = imgPath;
+          updateReplacement(urlKey, state.img, state.zoom, state.pos);
+
           const prev = $(`#preview-${safeId}`);
           if (prev) {
-            prev.innerHTML = `<img src="file:///${imgPath.replace(/\\/g, '/')}">`;
+            prev.innerHTML = `<img src="file:///${imgPath.replace(/\\/g, '/')}" style="transform: scale(${state.zoom}); transform-origin: ${state.pos}; object-position: ${state.pos};">`;
           }
           const badgeBox = $(`#badge-${safeId}`);
           if (badgeBox) {
@@ -405,6 +491,50 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
           }
         }
       } catch (err) {}
+    });
+  });
+
+  // Zoom slider event listeners
+  container.querySelectorAll('.zoom-slider').forEach(slider => {
+    slider.addEventListener('input', e => {
+      const input = e.target as HTMLInputElement;
+      const urlKey = input.dataset.url;
+      const safeId = input.dataset.id;
+      if (!urlKey || !safeId) return;
+
+      const zoom = parseFloat(input.value);
+      const valBadge = $(`#zoom-val-${safeId}`);
+      if (valBadge) valBadge.textContent = `${Math.round(zoom * 100)}%`;
+
+      const state = getUrlState(urlKey);
+      state.zoom = zoom;
+      updateReplacement(urlKey, state.img, state.zoom, state.pos);
+
+      const previewImg = $(`#preview-${safeId} img`) as HTMLImageElement;
+      if (previewImg) {
+        previewImg.style.transform = `scale(${zoom})`;
+      }
+    });
+  });
+
+  // Position select event listeners
+  container.querySelectorAll('.pos-select').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const select = e.target as HTMLSelectElement;
+      const urlKey = select.dataset.url;
+      const safeId = select.dataset.id;
+      if (!urlKey || !safeId) return;
+
+      const pos = select.value;
+      const state = getUrlState(urlKey);
+      state.pos = pos;
+      updateReplacement(urlKey, state.img, state.zoom, state.pos);
+
+      const previewImg = $(`#preview-${safeId} img`) as HTMLImageElement;
+      if (previewImg) {
+        previewImg.style.objectPosition = pos;
+        previewImg.style.transformOrigin = pos;
+      }
     });
   });
 }

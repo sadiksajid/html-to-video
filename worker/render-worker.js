@@ -184,7 +184,32 @@ async function renderJob(params) {
     if (iframeReplacements && Object.keys(iframeReplacements).length > 0) {
       log(id, 'info', `Applying ${Object.keys(iframeReplacements).length} mockup image replacements`);
       await page.evaluate((replacements) => {
-        for (const [targetUrl, imageSrc] of Object.entries(replacements)) {
+        for (const [targetUrl, val] of Object.entries(replacements)) {
+          let imageSrc = '';
+          let zoom = 1.0;
+          let position = 'top center';
+
+          if (typeof val === 'object' && val !== null) {
+            imageSrc = val.image || val.src || '';
+            zoom = parseFloat(val.zoom) || 1.0;
+            position = val.position || 'top center';
+          } else if (typeof val === 'string') {
+            if (val.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(val);
+                imageSrc = parsed.image || parsed.src || val;
+                zoom = parseFloat(parsed.zoom) || 1.0;
+                position = parsed.position || 'top center';
+              } catch (e) {
+                imageSrc = val;
+              }
+            } else {
+              imageSrc = val;
+            }
+          }
+
+          if (!imageSrc) continue;
+
           const iframes = document.querySelectorAll('iframe');
           iframes.forEach(iframe => {
             const dataSrc = iframe.getAttribute('data-src') || '';
@@ -193,17 +218,45 @@ async function renderJob(params) {
               (dataSrc && (dataSrc.includes(targetUrl) || targetUrl.includes(dataSrc))) ||
               (src && (src.includes(targetUrl) || targetUrl.includes(src)))
             ) {
+              // Create wrapper that maintains the exact layout, clipping and dimensions of the mockup
+              const wrapper = document.createElement('div');
+              wrapper.className = iframe.className;
+              wrapper.style.cssText = iframe.style.cssText;
+              wrapper.style.width = iframe.style.width || (iframe.offsetWidth ? iframe.offsetWidth + 'px' : '100%');
+              wrapper.style.height = iframe.style.height || (iframe.offsetHeight ? iframe.offsetHeight + 'px' : '100%');
+              wrapper.style.overflow = 'hidden';
+              wrapper.style.display = 'block';
+              wrapper.style.position = 'relative';
+              wrapper.style.margin = '0';
+              wrapper.style.padding = '0';
+              wrapper.style.boxSizing = 'border-box';
+
+              // Create image covering 100% of the screen with zoom
               const img = document.createElement('img');
               img.src = imageSrc;
-              img.className = iframe.className;
-              img.style.cssText = iframe.style.cssText;
+              img.style.position = 'absolute';
+              img.style.inset = '0';
               img.style.width = '100%';
               img.style.height = '100%';
+              img.style.minWidth = '100%';
+              img.style.minHeight = '100%';
+              img.style.maxWidth = 'none';
+              img.style.maxHeight = 'none';
               img.style.objectFit = 'cover';
+              img.style.objectPosition = position;
               img.style.display = 'block';
-              img.setAttribute('data-replaced', targetUrl);
+              img.style.border = 'none';
+              img.style.margin = '0';
+              img.style.padding = '0';
+
+              if (zoom && zoom !== 1.0) {
+                img.style.transform = `scale(${zoom})`;
+                img.style.transformOrigin = position;
+              }
+
+              wrapper.appendChild(img);
               if (iframe.parentNode) {
-                iframe.parentNode.replaceChild(img, iframe);
+                iframe.parentNode.replaceChild(wrapper, iframe);
               }
             }
           });

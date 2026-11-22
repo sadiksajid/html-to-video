@@ -558,10 +558,30 @@ func (qm *QueueManager) executeJob(job *Job) {
 
 	s := qm.settingsMgr.Get()
 
-	// Prepare data URIs for any iframe replacements
-	processedReplacements := make(map[string]string)
-	for url, imgPath := range job.IframeReplacements {
-		processedReplacements[url] = imageToDataURI(imgPath)
+	// Prepare data URIs for any iframe replacements (handling both JSON config and plain image paths)
+	processedReplacements := make(map[string]interface{})
+	for targetUrl, rawVal := range job.IframeReplacements {
+		var cfg struct {
+			Image    string  `json:"image"`
+			Zoom     float64 `json:"zoom"`
+			Position string  `json:"position"`
+		}
+		if err := json.Unmarshal([]byte(rawVal), &cfg); err == nil && cfg.Image != "" {
+			cfg.Image = imageToDataURI(cfg.Image)
+			if cfg.Zoom <= 0 {
+				cfg.Zoom = 1.0
+			}
+			if cfg.Position == "" {
+				cfg.Position = "top center"
+			}
+			processedReplacements[targetUrl] = cfg
+		} else {
+			processedReplacements[targetUrl] = map[string]interface{}{
+				"image":    imageToDataURI(rawVal),
+				"zoom":     1.0,
+				"position": "top center",
+			}
+		}
 	}
 
 	// 5. Send render command to worker
