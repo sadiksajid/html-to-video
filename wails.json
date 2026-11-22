@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Reel Studio",
+  "outputfilename": "ReelStudio",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Reel Studio"
+  },
+  "info": {
+    "companyName": "Reel Studio",
+    "productName": "Reel Studio",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright (C) 2026",
+    "comments": "Turn ReelSync reels into Instagram-ready MP4"
+  }
+}
