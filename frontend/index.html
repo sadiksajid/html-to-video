@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reel Studio</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-icon">🎬</span>
+        <div>
+          <h1 data-i18n="appTitle">Reel Studio</h1>
+          <p class="tagline" data-i18n="appSubtitle">Instagram Reel Renderer for ReelSync</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button id="btnBatch" class="btn secondary">
+          <span>📦</span> <span data-i18n="batchImport">Batch Import</span>
+        </button>
+        <button id="btnDiagnostics" class="btn icon-btn" title="Diagnostics">
+          <span>🩺</span>
+        </button>
+        <button id="btnSettings" class="btn icon-btn" title="Settings">
+          <span>⚙️</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="content">
+      <!-- Main Form Card -->
+      <section class="card form-card">
+        <div class="drops-container">
+          <!-- Reel Dropzone -->
+          <div class="dropzone" id="dropHtml">
+            <div class="drop-icon">📄</div>
+            <b data-i18n="reelDropTitle">Reel HTML File</b>
+            <small id="htmlLabel" data-i18n="reelDropSubtitle">Drag & drop reel.html or click to browse</small>
+            <button type="button" class="btn small" id="btnPickHtml" data-i18n="browseFile">Browse...</button>
+          </div>
+
+          <!-- Audio Dropzone -->
+          <div class="dropzone" id="dropAudio">
+            <div class="drop-icon">🎙️</div>
+            <b data-i18n="audioDropTitle">Voice-over Audio</b>
+            <small id="audioLabel" data-i18n="audioDropSubtitle">mp3, wav, m4a, aac, ogg...</small>
+            <button type="button" class="btn small" id="btnPickAudio" data-i18n="browseFile">Browse...</button>
+          </div>
+        </div>
+
+        <!-- Render Options -->
+        <div class="options-grid">
+          <div class="option-field">
+            <label data-i18n="resolutionLabel">Resolution</label>
+            <select id="selectResolution">
+              <option value="720">720 × 1280 (Fast)</option>
+              <option value="1080" selected>1080 × 1920 (Instagram Standard)</option>
+              <option value="1440">1440 × 2560 (Extra Sharp)</option>
+            </select>
+          </div>
+
+          <div class="option-field">
+            <label data-i18n="fpsLabel">Frame Rate</label>
+            <select id="selectFps">
+              <option value="24">24 fps (Cinematic)</option>
+              <option value="30" selected>30 fps (Standard)</option>
+              <option value="60">60 fps (Smooth)</option>
+            </select>
+          </div>
+
+          <div class="option-field">
+            <label data-i18n="qualityLabel">Quality Preset</label>
+            <select id="selectQuality">
+              <option value="best">Best (CRF 16 · Slow)</option>
+              <option value="high" selected>High (CRF 18 · Recommended)</option>
+              <option value="balanced">Balanced (CRF 21 · Fast)</option>
+              <option value="small">Small File (CRF 25)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Output Directory -->
+        <div class="output-folder-row">
+          <div class="out-dir-info">
+            <span class="label" data-i18n="outputFolderLabel">Output Folder:</span>
+            <span class="path" id="txtOutputDir">...</span>
+          </div>
+          <button type="button" class="btn secondary small" id="btnChangeOutputDir" data-i18n="changeFolder">Change...</button>
+        </div>
+
+        <!-- Action Button -->
+        <button id="btnRender" class="btn primary go-btn" disabled>
+          <span data-i18n="renderButton">Render Video</span>
+        </button>
+
+        <div id="formError" class="error-banner" style="display:none"></div>
+      </section>
+
+      <!-- Queue Section -->
+      <section class="queue-section">
+        <div class="section-header">
+          <h2 data-i18n="videosTitle">Videos & Queue</h2>
+          <span id="queueBadge" class="badge">0</span>
+        </div>
+
+        <div id="jobsList" class="jobs-list">
+          <div class="empty-state">
+            <span class="empty-icon">📂</span>
+            <p data-i18n="emptyQueue">No videos rendered yet. Drop a reel and voice-over above to begin.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Video Preview Modal -->
+    <div id="modalVideo" class="modal" style="display:none">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 id="videoModalTitle">Video Preview</h3>
+          <button class="close-btn" data-close="modalVideo">&times;</button>
+        </div>
+        <div class="modal-body video-container">
+          <video id="previewPlayer" controls autoplay playsinline></video>
+        </div>
+        <div class="modal-footer">
+          <button id="btnOpenVideoFile" class="btn secondary" data-i18n="openFile">Open File</button>
+          <button id="btnRevealVideo" class="btn secondary" data-i18n="showInExplorer">Show in Explorer</button>
+          <button class="btn" data-close="modalVideo" data-i18n="close">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch Import Modal -->
+    <div id="modalBatch" class="modal" style="display:none">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-header">
+          <h3 data-i18n="batchModalTitle">Batch Import Pairs</h3>
+          <button class="close-btn" data-close="modalBatch">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="subtext" data-i18n="batchModalDesc">Matched reels and audio files by name. Review pairs before queueing:</p>
+          <div id="batchPairsList" class="batch-list"></div>
+          <div id="batchUnpairsList" class="batch-unpaired"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnSelectBatchFiles" class="btn secondary" data-i18n="selectMoreFiles">Select Files...</button>
+          <button id="btnEnqueueBatch" class="btn primary" disabled data-i18n="enqueueAll">Add Pairs to Queue</button>
+          <button class="btn" data-close="modalBatch" data-i18n="cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="modalSettings" class="modal" style="display:none">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 data-i18n="settingsTitle">Settings</h3>
+          <button class="close-btn" data-close="modalSettings">&times;</button>
+        </div>
+        <div class="modal-body settings-body">
+          <div class="setting-item">
+            <label data-i18n="langLabel">Language</label>
+            <select id="cfgLanguage">
+              <option value="en">English</option>
+              <option value="de">Deutsch</option>
+              <option value="ar">العربية (Arabic RTL)</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <label data-i18n="concurrencyLabel">Max Parallel Renders</label>
+            <div class="slider-row">
+              <input type="range" id="cfgConcurrency" min="1" max="4" value="1">
+              <span id="cfgConcurrencyVal">1</span>
+            </div>
+          </div>
+
+          <div class="setting-item">
+            <label data-i18n="browserChoiceLabel">Browser Automation Engine</label>
+            <select id="cfgBrowser">
+              <option value="msedge">Microsoft Edge (System Built-in)</option>
+              <option value="chromium">Playwright Headless Chromium</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cfgKeepIntermediate">
+              <span data-i18n="keepFilesLabel">Keep intermediate job files (temp frames & scripts)</span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnSaveSettings" class="btn primary" data-i18n="saveSettings">Save Changes</button>
+          <button class="btn" data-close="modalSettings" data-i18n="close">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Diagnostics Modal -->
+    <div id="modalDiagnostics" class="modal" style="display:none">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-header">
+          <h3 data-i18n="diagnosticsTitle">System Diagnostics & Logs</h3>
+          <button class="close-btn" data-close="modalDiagnostics">&times;</button>
+        </div>
+        <div class="modal-body">
+          <pre id="txtDiagnostics" class="diagnostics-box"></pre>
+        </div>
+        <div class="modal-footer">
+          <button id="btnCopyDiagnostics" class="btn secondary" data-i18n="copyDiagnostics">Copy Diagnostics</button>
+          <button class="btn" data-close="modalDiagnostics" data-i18n="close">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
