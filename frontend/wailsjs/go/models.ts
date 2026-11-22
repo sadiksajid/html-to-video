@@ -68,6 +68,20 @@ export namespace app {
 	        this.selectedEngine = source["selectedEngine"];
 	    }
 	}
+	export class MockupImageResult {
+	    path: string;
+	    dataUri: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MockupImageResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.dataUri = source["dataUri"];
+	    }
+	}
 
 }
 

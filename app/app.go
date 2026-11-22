@@ -36,6 +36,11 @@ type BrowserStatus struct {
 	SelectedEngine    string `json:"selectedEngine"`
 }
 
+type MockupImageResult struct {
+	Path    string `json:"path"`
+	DataURI string `json:"dataUri"`
+}
+
 type App struct {
 	ctx         context.Context
 	rootDir     string
@@ -119,13 +124,25 @@ func (a *App) CheckReelIframes(reelPath string) ([]iframe.CheckResult, error) {
 	return iframe.CheckReelFile(reelPath)
 }
 
-func (a *App) SelectMockupImage() (string, error) {
-	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+func (a *App) SelectMockupImage() (*MockupImageResult, error) {
+	filePath, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
 		Title: "Select Mockup Replacement Image",
 		Filters: []wailsRuntime.FileFilter{
 			{DisplayName: "Images (*.png;*.jpg;*.jpeg;*.webp)", Pattern: "*.png;*.jpg;*.jpeg;*.webp"},
 		},
 	})
+	if err != nil || filePath == "" {
+		return nil, err
+	}
+	dataURI := jobs.ImageToDataURI(filePath)
+	return &MockupImageResult{
+		Path:    filePath,
+		DataURI: dataURI,
+	}, nil
+}
+
+func (a *App) GetImageDataURI(filePath string) (string, error) {
+	return jobs.ImageToDataURI(filePath), nil
 }
 
 func (a *App) AddJob(reelPath, audioPath, resolution string, fps int, quality string, outDir string, iframeReplacements map[string]string) (*jobs.Job, error) {

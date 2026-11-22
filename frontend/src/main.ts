@@ -6,6 +6,7 @@ import {
   CheckReelIframes,
   DeleteJob,
   GetDiagnostics,
+  GetImageDataURI,
   GetJobs,
   GetSettings,
   OpenFile,
@@ -376,14 +377,22 @@ function toSafeId(str: string): string {
   return 'ifr_' + Math.abs(hash);
 }
 
+interface ReplacementState {
+  img: string;
+  dataUri: string;
+  zoom: number;
+  pos: string;
+}
+
 function renderIframeModal(blockedItems: iframe.CheckResult[]) {
   const container = $('#iframeBlockList');
   container.innerHTML = '';
   const t = TRANSLATIONS[currentLang];
 
-  const getUrlState = (url: string) => {
+  const getUrlState = (url: string): ReplacementState => {
     const raw = iframeReplacements[url];
     let img = '';
+    let dataUri = '';
     let zoom = 1.0;
     let pos = 'top center';
     if (raw) {
@@ -391,22 +400,26 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
         const p = JSON.parse(raw);
         if (p && typeof p === 'object') {
           img = p.image || '';
+          dataUri = p.dataUri || (p.image?.startsWith('data:') ? p.image : '');
           zoom = typeof p.zoom === 'number' ? p.zoom : 1.0;
           pos = p.position || 'top center';
         } else {
           img = raw;
+          if (raw.startsWith('data:')) dataUri = raw;
         }
       } catch {
         img = raw;
+        if (raw.startsWith('data:')) dataUri = raw;
       }
     }
-    return { img, zoom, pos };
+    return { img, dataUri, zoom, pos };
   };
 
-  const updateReplacement = (url: string, img: string, zoom: number, pos: string) => {
-    if (!img) return;
+  const updateReplacement = (url: string, img: string, dataUri: string, zoom: number, pos: string) => {
+    if (!img && !dataUri) return;
     iframeReplacements[url] = JSON.stringify({
-      image: img,
+      image: img || dataUri,
+      dataUri: dataUri,
       zoom: zoom,
       position: pos
     });
@@ -417,8 +430,9 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
     row.className = 'iframe-block-item';
 
     const safeUrl = item.url;
-    const { img: imgPath, zoom: zoomVal, pos: posVal } = getUrlState(safeUrl);
+    const state = getUrlState(safeUrl);
     const safeId = toSafeId(safeUrl);
+    const displaySrc = state.dataUri || (state.img.startsWith('data:') ? state.img : '');
 
     row.innerHTML = `
       <div class="iframe-header">
@@ -428,8 +442,8 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
         </div>
       </div>
       <div class="iframe-upload-row">
-        <div class="replacement-preview" id="preview-${safeId}">
-          ${imgPath ? `<img src="file:///${imgPath.replace(/\\/g, '/')}" style="transform: scale(${zoomVal}); transform-origin: ${posVal}; object-position: ${posVal};">` : '<span style="font-size:24px">🖼️</span>'}
+        <div class="replacement-preview" id="preview-${safeId}" data-pick-img="${safeUrl}" title="${t.chooseImage}">
+          ${displaySrc ? `<img src="${displaySrc}" style="transform: scale(${state.zoom}); transform-origin: ${state.pos}; object-position: ${state.pos};">` : '<span style="font-size:24px">🖼️</span>'}
         </div>
         <div class="iframe-controls">
           <div style="display: flex; align-items: center; gap: 10px;">
@@ -437,24 +451,24 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
               ${t.chooseImage}
             </button>
             <div id="badge-${safeId}">
-              ${imgPath ? `<span class="iframe-mockup-badge">${t.imageSelected}</span>` : ''}
+              ${(state.img || state.dataUri) ? `<span class="iframe-mockup-badge">${t.imageSelected}</span>` : ''}
             </div>
           </div>
 
           <div class="iframe-control-field">
             <label>${t.zoomLabel}</label>
             <div class="zoom-slider-row">
-              <input type="range" class="zoom-slider" data-url="${safeUrl}" data-id="${safeId}" min="1.0" max="2.5" step="0.05" value="${zoomVal}">
-              <span class="zoom-val-badge" id="zoom-val-${safeId}">${Math.round(zoomVal * 100)}%</span>
+              <input type="range" class="zoom-slider" data-url="${safeUrl}" data-id="${safeId}" min="1.0" max="2.5" step="0.05" value="${state.zoom}">
+              <span class="zoom-val-badge" id="zoom-val-${safeId}">${Math.round(state.zoom * 100)}%</span>
             </div>
           </div>
 
           <div class="iframe-control-field">
             <label>${t.positionLabel}</label>
             <select class="pos-select" data-url="${safeUrl}" data-id="${safeId}">
-              <option value="top center" ${posVal === 'top center' ? 'selected' : ''}>${t.posTop}</option>
-              <option value="center center" ${posVal === 'center center' ? 'selected' : ''}>${t.posCenter}</option>
-              <option value="bottom center" ${posVal === 'bottom center' ? 'selected' : ''}>${t.posBottom}</option>
+              <option value="top center" ${state.pos === 'top center' ? 'selected' : ''}>${t.posTop}</option>
+              <option value="center center" ${state.pos === 'center center' ? 'selected' : ''}>${t.posCenter}</option>
+              <option value="bottom center" ${state.pos === 'bottom center' ? 'selected' : ''}>${t.posBottom}</option>
             </select>
           </div>
 
@@ -466,31 +480,51 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
     `;
 
     container.appendChild(row);
-  });
 
-  // Image picker event listeners
-  container.querySelectorAll('[data-pick-img]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const urlKey = (btn as HTMLElement).dataset.pickImg;
-      if (!urlKey) return;
-      try {
-        const imgPath = await SelectMockupImage();
-        if (imgPath) {
-          const safeId = toSafeId(urlKey);
-          const state = getUrlState(urlKey);
-          state.img = imgPath;
-          updateReplacement(urlKey, state.img, state.zoom, state.pos);
-
+    // If we have an image path but not yet a data URI, asynchronously load data URI for instant preview
+    if (state.img && !displaySrc) {
+      GetImageDataURI(state.img).then(uri => {
+        if (uri) {
+          state.dataUri = uri;
+          updateReplacement(safeUrl, state.img, uri, state.zoom, state.pos);
           const prev = $(`#preview-${safeId}`);
           if (prev) {
-            prev.innerHTML = `<img src="file:///${imgPath.replace(/\\/g, '/')}" style="transform: scale(${state.zoom}); transform-origin: ${state.pos}; object-position: ${state.pos};">`;
-          }
-          const badgeBox = $(`#badge-${safeId}`);
-          if (badgeBox) {
-            badgeBox.innerHTML = `<span class="iframe-mockup-badge">${t.imageSelected}</span>`;
+            prev.innerHTML = `<img src="${uri}" style="transform: scale(${state.zoom}); transform-origin: ${state.pos}; object-position: ${state.pos};">`;
           }
         }
-      } catch (err) {}
+      }).catch(() => {});
+    }
+  });
+
+  const handlePickImage = async (urlKey: string) => {
+    try {
+      const res = await SelectMockupImage();
+      if (res && (res.path || res.dataUri)) {
+        const safeId = toSafeId(urlKey);
+        const state = getUrlState(urlKey);
+        state.img = res.path || '';
+        state.dataUri = res.dataUri || '';
+        updateReplacement(urlKey, state.img, state.dataUri, state.zoom, state.pos);
+
+        const prev = $(`#preview-${safeId}`);
+        if (prev) {
+          prev.innerHTML = `<img src="${state.dataUri}" style="transform: scale(${state.zoom}); transform-origin: ${state.pos}; object-position: ${state.pos};">`;
+        }
+        const badgeBox = $(`#badge-${safeId}`);
+        if (badgeBox) {
+          badgeBox.innerHTML = `<span class="iframe-mockup-badge">${t.imageSelected}</span>`;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to select mockup image:', err);
+    }
+  };
+
+  // Image picker event listeners (button & preview frame)
+  container.querySelectorAll('[data-pick-img]').forEach(el => {
+    el.addEventListener('click', () => {
+      const urlKey = (el as HTMLElement).dataset.pickImg;
+      if (urlKey) handlePickImage(urlKey);
     });
   });
 
@@ -508,7 +542,7 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
 
       const state = getUrlState(urlKey);
       state.zoom = zoom;
-      updateReplacement(urlKey, state.img, state.zoom, state.pos);
+      updateReplacement(urlKey, state.img, state.dataUri, state.zoom, state.pos);
 
       const previewImg = $(`#preview-${safeId} img`) as HTMLImageElement;
       if (previewImg) {
@@ -528,7 +562,7 @@ function renderIframeModal(blockedItems: iframe.CheckResult[]) {
       const pos = select.value;
       const state = getUrlState(urlKey);
       state.pos = pos;
-      updateReplacement(urlKey, state.img, state.zoom, state.pos);
+      updateReplacement(urlKey, state.img, state.dataUri, state.zoom, state.pos);
 
       const previewImg = $(`#preview-${safeId} img`) as HTMLImageElement;
       if (previewImg) {

@@ -19,6 +19,8 @@ export function DeleteJob(arg1:string):Promise<void>;
 
 export function GetDiagnostics():Promise<string>;
 
+export function GetImageDataURI(arg1:string):Promise<string>;
+
 export function GetJobs():Promise<Array<jobs.Job>>;
 
 export function GetSettings():Promise<settings.Settings>;
@@ -33,7 +35,7 @@ export function SelectAudioFile():Promise<string>;
 
 export function SelectBatchFiles():Promise<app.BatchPairResult>;
 
-export function SelectMockupImage():Promise<string>;
+export function SelectMockupImage():Promise<app.MockupImageResult>;
 
 export function SelectOutputDir():Promise<string>;
 

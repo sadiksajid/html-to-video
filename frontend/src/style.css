@@ -661,6 +661,13 @@ select:focus, input[type="text"]:focus {
   justify-content: center;
   overflow: hidden;
   position: relative;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.replacement-preview:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
 }
 
 .replacement-preview img {

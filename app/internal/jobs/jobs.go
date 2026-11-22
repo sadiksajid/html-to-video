@@ -567,7 +567,7 @@ func (qm *QueueManager) executeJob(job *Job) {
 			Position string  `json:"position"`
 		}
 		if err := json.Unmarshal([]byte(rawVal), &cfg); err == nil && cfg.Image != "" {
-			cfg.Image = imageToDataURI(cfg.Image)
+			cfg.Image = ImageToDataURI(cfg.Image)
 			if cfg.Zoom <= 0 {
 				cfg.Zoom = 1.0
 			}
@@ -577,7 +577,7 @@ func (qm *QueueManager) executeJob(job *Job) {
 			processedReplacements[targetUrl] = cfg
 		} else {
 			processedReplacements[targetUrl] = map[string]interface{}{
-				"image":    imageToDataURI(rawVal),
+				"image":    ImageToDataURI(rawVal),
 				"zoom":     1.0,
 				"position": "top center",
 			}
@@ -625,7 +625,7 @@ func (qm *QueueManager) failJob(job *Job, errMsg string) {
 	qm.notify(job)
 }
 
-func imageToDataURI(path string) string {
+func ImageToDataURI(path string) string {
 	if strings.HasPrefix(path, "data:") {
 		return path
 	}

@@ -30,6 +30,10 @@ export function GetDiagnostics() {
   return window['go']['app']['App']['GetDiagnostics']();
 }
 
+export function GetImageDataURI(arg1) {
+  return window['go']['app']['App']['GetImageDataURI'](arg1);
+}
+
 export function GetJobs() {
   return window['go']['app']['App']['GetJobs']();
 }
