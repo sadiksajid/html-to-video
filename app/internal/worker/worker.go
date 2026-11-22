@@ -28,8 +28,9 @@ type RenderCommand struct {
 	ImageFormat       string  `json:"imageFormat"`
 	Tail              float64 `json:"tail"`
 	FFmpegPath        string  `json:"ffmpegPath"`
-	BrowserChannel    string  `json:"browserChannel"`
-	BrowserExecutable string  `json:"browserExecutable"`
+	BrowserChannel    string            `json:"browserChannel"`
+	BrowserExecutable string            `json:"browserExecutable"`
+	IframeReplacements map[string]string `json:"iframeReplacements,omitempty"`
 }
 
 type CancelCommand struct {

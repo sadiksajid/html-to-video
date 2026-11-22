@@ -6,8 +6,8 @@ export function AddBatchJobs(arg1) {
   return window['go']['app']['App']['AddBatchJobs'](arg1);
 }
 
-export function AddJob(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['app']['App']['AddJob'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function AddJob(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['app']['App']['AddJob'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function CancelJob(arg1) {
@@ -16,6 +16,10 @@ export function CancelJob(arg1) {
 
 export function CheckBrowserStatus() {
   return window['go']['app']['App']['CheckBrowserStatus']();
+}
+
+export function CheckReelIframes(arg1) {
+  return window['go']['app']['App']['CheckReelIframes'](arg1);
 }
 
 export function DeleteJob(arg1) {
@@ -52,6 +56,10 @@ export function SelectAudioFile() {
 
 export function SelectBatchFiles() {
   return window['go']['app']['App']['SelectBatchFiles']();
+}
+
+export function SelectMockupImage() {
+  return window['go']['app']['App']['SelectMockupImage']();
 }
 
 export function SelectOutputDir() {

@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -56,6 +57,7 @@ type Job struct {
 	Created   int64       `json:"created"`
 	Completed int64       `json:"completed"`
 	Logs      []string    `json:"logs"`
+	IframeReplacements map[string]string `json:"iframeReplacements,omitempty"`
 }
 
 type JobUpdateCallback func(job *Job)
@@ -189,6 +191,7 @@ func (qm *QueueManager) AddJob(
 	reelPath, audioPath, resolution string,
 	fps int, quality string,
 	outDir string,
+	iframeReplacements map[string]string,
 ) (*Job, error) {
 	// 1. Validate inputs exist
 	if _, err := os.Stat(reelPath); err != nil {
@@ -265,6 +268,7 @@ func (qm *QueueManager) AddJob(
 		Duration: duration,
 		Created:  time.Now().UnixMilli(),
 		Logs:     make([]string, 0),
+		IframeReplacements: iframeReplacements,
 	}
 
 	qm.mu.Lock()
@@ -554,6 +558,12 @@ func (qm *QueueManager) executeJob(job *Job) {
 
 	s := qm.settingsMgr.Get()
 
+	// Prepare data URIs for any iframe replacements
+	processedReplacements := make(map[string]string)
+	for url, imgPath := range job.IframeReplacements {
+		processedReplacements[url] = imageToDataURI(imgPath)
+	}
+
 	// 5. Send render command to worker
 	cmd := worker.RenderCommand{
 		Cmd:            "render",
@@ -573,6 +583,7 @@ func (qm *QueueManager) executeJob(job *Job) {
 		Tail:           1.0,
 		FFmpegPath:     qm.ffmpegPath,
 		BrowserChannel: s.BrowserChoice,
+		IframeReplacements: processedReplacements,
 	}
 
 	if err := qm.supervisor.SendRender(cmd); err != nil {
@@ -592,6 +603,27 @@ func (qm *QueueManager) failJob(job *Job, errMsg string) {
 	qm.mu.Unlock()
 
 	qm.notify(job)
+}
+
+func imageToDataURI(path string) string {
+	if strings.HasPrefix(path, "data:") {
+		return path
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return path
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	mime := "image/png"
+	switch ext {
+	case ".jpg", ".jpeg":
+		mime = "image/jpeg"
+	case ".webp":
+		mime = "image/webp"
+	case ".gif":
+		mime = "image/gif"
+	}
+	return fmt.Sprintf("data:%s;base64,%s", mime, base64.StdEncoding.EncodeToString(data))
 }
 
 func copyFile(src, dst string) error {

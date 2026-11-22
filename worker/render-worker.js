@@ -84,7 +84,8 @@ async function renderJob(params) {
     tail = 1.0,
     ffmpegPath = 'ffmpeg',
     browserChannel = 'msedge',
-    browserExecutable = ''
+    browserExecutable = '',
+    iframeReplacements = {}
   } = params;
 
   let cancelled = false;
@@ -149,6 +150,24 @@ async function renderJob(params) {
       deviceScaleFactor: scaleFactor
     });
     const page = await context.newPage();
+
+    // Strip X-Frame-Options and Content-Security-Policy headers so iframes can embed
+    await page.route('**/*', async (route) => {
+      try {
+        const response = await route.fetch();
+        const headers = response.headers();
+        delete headers['x-frame-options'];
+        delete headers['content-security-policy'];
+        delete headers['content-security-policy-report-only'];
+        await route.fulfill({
+          response,
+          headers
+        });
+      } catch (e) {
+        route.continue().catch(() => {});
+      }
+    });
+
     await page.addInitScript(VIRTUAL_TIME);
 
     send({ type: 'progress', id, phase: 'Opening reel', pct: 2 });
@@ -160,6 +179,37 @@ async function renderJob(params) {
     await page.evaluate(() => document.fonts && document.fonts.ready);
 
     if (cancelled) return;
+
+    // Apply any uploaded image replacements for blocked/broken website mockups
+    if (iframeReplacements && Object.keys(iframeReplacements).length > 0) {
+      log(id, 'info', `Applying ${Object.keys(iframeReplacements).length} mockup image replacements`);
+      await page.evaluate((replacements) => {
+        for (const [targetUrl, imageSrc] of Object.entries(replacements)) {
+          const iframes = document.querySelectorAll('iframe');
+          iframes.forEach(iframe => {
+            const dataSrc = iframe.getAttribute('data-src') || '';
+            const src = iframe.getAttribute('src') || '';
+            if (
+              (dataSrc && (dataSrc.includes(targetUrl) || targetUrl.includes(dataSrc))) ||
+              (src && (src.includes(targetUrl) || targetUrl.includes(src)))
+            ) {
+              const img = document.createElement('img');
+              img.src = imageSrc;
+              img.className = iframe.className;
+              img.style.cssText = iframe.style.cssText;
+              img.style.width = '100%';
+              img.style.height = '100%';
+              img.style.objectFit = 'cover';
+              img.style.display = 'block';
+              img.setAttribute('data-replaced', targetUrl);
+              if (iframe.parentNode) {
+                iframe.parentNode.replaceChild(img, iframe);
+              }
+            }
+          });
+        }
+      }, iframeReplacements);
+    }
 
     const isReel = await page.evaluate(() => typeof silent !== 'undefined' && !!document.getElementById('silentBtn'));
     if (!isReel) {

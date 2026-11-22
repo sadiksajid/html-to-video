@@ -133,6 +133,26 @@
       </div>
     </div>
 
+    <!-- Iframe Replacement Modal -->
+    <div id="modalIframe" class="modal" style="display:none">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-header">
+          <h3 data-i18n="iframeModalTitle">Mockup Image Replacement</h3>
+          <button class="close-btn" data-close="modalIframe">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="subtext" data-i18n="iframeModalDesc">
+            The following website(s) in your reel cannot be embedded directly in an iframe (e.g. blocked by security policies like X-Frame-Options). Upload a screenshot or image to use in the mockup instead:
+          </p>
+          <div id="iframeBlockList" class="iframe-block-list"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnConfirmIframeReplacements" class="btn primary" data-i18n="confirmReplacements">Use Replacement Image</button>
+          <button class="btn" data-close="modalIframe" data-i18n="skip">Skip / Keep As Is</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Batch Import Modal -->
     <div id="modalBatch" class="modal" style="display:none">
       <div class="modal-dialog modal-lg">

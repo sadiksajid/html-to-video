@@ -3,6 +3,7 @@ import {
   AddBatchJobs,
   AddJob,
   CancelJob,
+  CheckReelIframes,
   DeleteJob,
   GetDiagnostics,
   GetJobs,
@@ -12,11 +13,12 @@ import {
   RetryJob,
   SelectAudioFile,
   SelectBatchFiles,
+  SelectMockupImage,
   SelectOutputDir,
   SelectReelFile,
   UpdateSettings
 } from '../wailsjs/go/app/App';
-import { jobs, settings, app } from '../wailsjs/go/models';
+import { jobs, settings, app, iframe } from '../wailsjs/go/models';
 
 // Localization
 type Lang = 'en' | 'de' | 'ar';
@@ -60,7 +62,14 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     renderAgain: 'Render Again',
     delete: 'Delete',
     retry: 'Retry',
-    preview: 'Preview'
+    preview: 'Preview',
+    iframeModalTitle: 'Mockup Image Replacement',
+    iframeModalDesc: 'The following website(s) in your reel cannot be embedded directly in an iframe (e.g. blocked by security policies like X-Frame-Options). Upload a screenshot or image to use in the mockup instead:',
+    confirmReplacements: 'Use Replacement Image',
+    skip: 'Skip / Keep As Is',
+    chooseImage: 'Choose Screenshot...',
+    imageSelected: 'Image Attached ✓',
+    checkingIframes: 'Checking live website frames...'
   },
   de: {
     appTitle: 'Reel Studio',
@@ -100,7 +109,14 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     renderAgain: 'Erneut rendern',
     delete: 'Löschen',
     retry: 'Wiederholen',
-    preview: 'Vorschau'
+    preview: 'Vorschau',
+    iframeModalTitle: 'Mockup-Bildersatz',
+    iframeModalDesc: 'Die folgende(n) Webseite(n) im Reel können nicht direkt eingebettet werden (z. B. durch X-Frame-Options blockiert). Lade bitte stattdessen einen Screenshot/Bild hoch:',
+    confirmReplacements: 'Ersatzbild verwenden',
+    skip: 'Überspringen',
+    chooseImage: 'Screenshot wählen...',
+    imageSelected: 'Bild ausgewählt ✓',
+    checkingIframes: 'Prüfe Webseiten-Iframes...'
   },
   ar: {
     appTitle: 'ريل ستوديو',
@@ -140,7 +156,14 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     renderAgain: 'إعادة الرندرة',
     delete: 'حذف',
     retry: 'إعادة المحاولة',
-    preview: 'معاينة'
+    preview: 'معاينة',
+    iframeModalTitle: 'استبدال شاشة النموذج (Mockup) بصورة',
+    iframeModalDesc: 'الموقع/المواقع التالية في الريل تمنع التضمين داخل إطار (مثل سياسة X-Frame-Options). يرجى تحميل لقطة شاشة أو صورة لاستخدامها داخل نموذج الهاتف:',
+    confirmReplacements: 'استخدام الصورة البديلة',
+    skip: 'تخطي / الإبقاء كما هي',
+    chooseImage: 'اختيار صورة لقطة الشاشة...',
+    imageSelected: 'تم إرفاق الصورة ✓',
+    checkingIframes: 'جارٍ فحص مواقع الريل...'
   }
 };
 
@@ -152,6 +175,7 @@ let selectedAudioPath: string = '';
 let jobsMap: Map<string, jobs.Job> = new Map();
 let batchPairs: app.BatchItem[] = [];
 let previewVideoPath: string = '';
+let iframeReplacements: Record<string, string> = {};
 
 const $ = <T extends HTMLElement>(sel: string): T => document.querySelector(sel) as T;
 
@@ -260,6 +284,7 @@ function renderJobs() {
           <span class="chip">${j.options.resolution}p</span>
           <span class="chip">${j.options.fps} fps</span>
           <span class="chip">${j.options.quality}</span>
+          ${j.iframeReplacements && Object.keys(j.iframeReplacements).length > 0 ? `<span class="chip" style="color:#34d399">🖼️ Image Mockup</span>` : ''}
         </div>
         ${j.status !== 'done' && j.status !== 'error' && j.status !== 'interrupted' ? `
           <div class="progress-bar-container">
@@ -304,6 +329,86 @@ async function loadJobs() {
   }
 }
 
+async function checkReelIframesAndPrompt(htmlPath: string) {
+  const t = TRANSLATIONS[currentLang];
+  const originalLabel = $('#htmlLabel').textContent;
+  $('#htmlLabel').textContent = t.checkingIframes;
+
+  try {
+    const results = await CheckReelIframes(htmlPath);
+    const blocked = results.filter(r => !r.working);
+
+    if (blocked.length > 0) {
+      renderIframeModal(blocked);
+      $('#modalIframe').style.display = 'flex';
+    }
+  } catch (err) {
+    console.warn('Iframe check failed:', err);
+  } finally {
+    $('#htmlLabel').textContent = originalLabel;
+  }
+}
+
+function renderIframeModal(blockedItems: iframe.CheckResult[]) {
+  const container = $('#iframeBlockList');
+  container.innerHTML = '';
+  const t = TRANSLATIONS[currentLang];
+
+  blockedItems.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'iframe-block-item';
+
+    const safeUrl = item.url;
+    const existingReplacement = iframeReplacements[safeUrl];
+
+    row.innerHTML = `
+      <div class="iframe-header">
+        <div>
+          <div class="iframe-url">${safeUrl}</div>
+          <div class="iframe-reason">⚠️ ${item.reason}</div>
+        </div>
+      </div>
+      <div class="iframe-upload-row">
+        <div class="replacement-preview" id="preview-${btoa(safeUrl).replace(/=/g, '')}">
+          ${existingReplacement ? `<img src="${existingReplacement}">` : '<span style="font-size:24px">🖼️</span>'}
+        </div>
+        <div>
+          <button type="button" class="btn secondary small" data-pick-img="${safeUrl}">
+            ${t.chooseImage}
+          </button>
+          <div id="badge-${btoa(safeUrl).replace(/=/g, '')}">
+            ${existingReplacement ? `<span class="iframe-mockup-badge">${t.imageSelected}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.appendChild(row);
+  });
+
+  container.querySelectorAll('[data-pick-img]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const urlKey = (btn as HTMLElement).dataset.pickImg;
+      if (!urlKey) return;
+      try {
+        const imgPath = await SelectMockupImage();
+        if (imgPath) {
+          iframeReplacements[urlKey] = imgPath;
+          const safeId = btoa(urlKey).replace(/=/g, '');
+          const prev = $(`#preview-${safeId}`);
+          if (prev) {
+            prev.innerHTML = `<img src="file:///${imgPath.replace(/\\/g, '/')}">`;
+          }
+          const badgeBox = $(`#badge-${safeId}`);
+          if (badgeBox) {
+            badgeBox.innerHTML = `<span class="iframe-mockup-badge">${t.imageSelected}</span>`;
+          }
+        }
+      } catch (err) {}
+    });
+  });
+}
+
 function setupEvents() {
   // Wails Event Bus
   const w = window as any;
@@ -326,6 +431,7 @@ function setupEvents() {
         $('#htmlLabel').textContent = res.split(/[\\/]/).pop() || res;
         $('#dropHtml').classList.add('active');
         updateCheck();
+        await checkReelIframesAndPrompt(res);
       }
     } catch (e) {}
   });
@@ -359,14 +465,16 @@ function setupEvents() {
     });
   };
 
-  wireDrop($('#dropHtml'), f => {
+  wireDrop($('#dropHtml'), async f => {
     if (f.name.match(/\.html?$/i)) {
-      // In webview2 dropped file object has path
       const fPath = (f as any).path || f.name;
       selectedHtmlPath = fPath;
       $('#htmlLabel').textContent = f.name;
       $('#dropHtml').classList.add('active');
       updateCheck();
+      if ((f as any).path) {
+        await checkReelIframesAndPrompt((f as any).path);
+      }
     }
   });
 
@@ -407,7 +515,8 @@ function setupEvents() {
         res,
         fps,
         quality,
-        currentSettings.defaultOutputDir
+        currentSettings.defaultOutputDir,
+        iframeReplacements
       );
 
       jobsMap.set(job.id, job);
@@ -416,6 +525,7 @@ function setupEvents() {
       // Reset selection
       selectedHtmlPath = '';
       selectedAudioPath = '';
+      iframeReplacements = {};
       $('#dropHtml').classList.remove('active');
       $('#dropAudio').classList.remove('active');
       $('#htmlLabel').textContent = TRANSLATIONS[currentLang].reelDropSubtitle;
@@ -457,7 +567,6 @@ function setupEvents() {
       previewVideoPath = previewPath;
       $('#videoModalTitle').textContent = target.dataset.title || 'Video Preview';
       const player = $('#previewPlayer') as HTMLVideoElement;
-      // In WebView2 on Windows, local files can be loaded or played directly
       player.src = previewPath.startsWith('http') ? previewPath : 'file:///' + previewPath.replace(/\\/g, '/');
       $('#modalVideo').style.display = 'flex';
       player.play().catch(() => {});
@@ -477,6 +586,11 @@ function setupEvents() {
         }
       }
     });
+  });
+
+  // Iframe modal confirm
+  $('#btnConfirmIframeReplacements').addEventListener('click', () => {
+    $('#modalIframe').style.display = 'none';
   });
 
   // Video preview buttons inside modal

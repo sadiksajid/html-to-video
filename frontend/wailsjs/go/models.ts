@@ -71,6 +71,27 @@ export namespace app {
 
 }
 
+export namespace iframe {
+	
+	export class CheckResult {
+	    url: string;
+	    working: boolean;
+	    reason?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CheckResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.working = source["working"];
+	        this.reason = source["reason"];
+	    }
+	}
+
+}
+
 export namespace jobs {
 	
 	export class JobOptions {
@@ -108,6 +129,7 @@ export namespace jobs {
 	    created: number;
 	    completed: number;
 	    logs: string[];
+	    iframeReplacements?: Record<string, string>;
 	
 	    static createFrom(source: any = {}) {
 	        return new Job(source);
@@ -133,6 +155,7 @@ export namespace jobs {
 	        this.created = source["created"];
 	        this.completed = source["completed"];
 	        this.logs = source["logs"];
+	        this.iframeReplacements = source["iframeReplacements"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

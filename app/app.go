@@ -10,6 +10,7 @@ import (
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"reelstudio/app/internal/iframe"
 	"reelstudio/app/internal/jobs"
 	"reelstudio/app/internal/settings"
 	"reelstudio/app/internal/winapi"
@@ -114,8 +115,21 @@ func (a *App) GetJobs() []*jobs.Job {
 	return a.queueMgr.GetJobs()
 }
 
-func (a *App) AddJob(reelPath, audioPath, resolution string, fps int, quality string, outDir string) (*jobs.Job, error) {
-	return a.queueMgr.AddJob(reelPath, audioPath, resolution, fps, quality, outDir)
+func (a *App) CheckReelIframes(reelPath string) ([]iframe.CheckResult, error) {
+	return iframe.CheckReelFile(reelPath)
+}
+
+func (a *App) SelectMockupImage() (string, error) {
+	return wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Select Mockup Replacement Image",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "Images (*.png;*.jpg;*.jpeg;*.webp)", Pattern: "*.png;*.jpg;*.jpeg;*.webp"},
+		},
+	})
+}
+
+func (a *App) AddJob(reelPath, audioPath, resolution string, fps int, quality string, outDir string, iframeReplacements map[string]string) (*jobs.Job, error) {
+	return a.queueMgr.AddJob(reelPath, audioPath, resolution, fps, quality, outDir, iframeReplacements)
 }
 
 func (a *App) AddBatchJobs(items []BatchItem) ([]*jobs.Job, error) {
@@ -135,7 +149,7 @@ func (a *App) AddBatchJobs(items []BatchItem) ([]*jobs.Job, error) {
 			q = s.DefaultQuality
 		}
 
-		j, err := a.queueMgr.AddJob(it.ReelPath, it.AudioPath, res, fps, q, s.DefaultOutputDir)
+		j, err := a.queueMgr.AddJob(it.ReelPath, it.AudioPath, res, fps, q, s.DefaultOutputDir, nil)
 		if err != nil {
 			return created, err
 		}
