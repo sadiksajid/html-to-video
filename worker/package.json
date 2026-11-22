@@ -1,0 +1,10 @@
+{
+  "name": "reel-studio-worker",
+  "version": "1.0.0",
+  "description": "Render worker for Reel Studio",
+  "main": "render-worker.js",
+  "private": true,
+  "dependencies": {
+    "playwright": "1.65.1"
+  }
+}

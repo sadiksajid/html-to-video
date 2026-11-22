@@ -1,0 +1,18 @@
+# Dependencies and binaries
+/third_party/
+/worker/node_modules/
+/frontend/node_modules/
+/frontend/dist/
+/build/bin/
+
+# Temporary and test artifacts
+*.log
+testdata/*.mp4
+testdata/frame_*.png
+testdata/sample-audio.wav
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
