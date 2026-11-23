@@ -80,6 +80,27 @@ if [ -d "${ROOT_DIR}/third_party" ]; then
     cp -R "${ROOT_DIR}/third_party/"* "${MACOS_DIR}/third_party/" 2>/dev/null || true
 fi
 
+# Ensure ffmpeg, ffprobe, and node are bundled into the standalone App
+for bin in ffmpeg ffprobe node; do
+    if [ ! -f "${MACOS_DIR}/third_party/${bin}" ]; then
+        FOUND_BIN=""
+        if command -v "${bin}" >/dev/null 2>&1; then
+            FOUND_BIN="$(command -v "${bin}")"
+        elif [ -f "/opt/homebrew/bin/${bin}" ]; then
+            FOUND_BIN="/opt/homebrew/bin/${bin}"
+        elif [ -f "/usr/local/bin/${bin}" ]; then
+            FOUND_BIN="/usr/local/bin/${bin}"
+        fi
+        if [ -n "${FOUND_BIN}" ]; then
+            echo "Bundling ${bin} from ${FOUND_BIN}..."
+            cp "${FOUND_BIN}" "${MACOS_DIR}/third_party/${bin}"
+            chmod +x "${MACOS_DIR}/third_party/${bin}"
+        else
+            echo "Warning: ${bin} was not found to bundle. Install via Homebrew: brew install ${bin}"
+        fi
+    fi
+done
+
 # Create a portable zip package for distribution
 ZIP_NAME="ReelStudio-mac-${ARCH//\//-}.zip"
 cd "${ROOT_DIR}/build/bin"

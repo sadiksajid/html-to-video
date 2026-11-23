@@ -3,7 +3,9 @@ package ffmpeg
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -32,8 +34,41 @@ var Resolutions = map[string]Resolution{
 	"1440": {Width: 1440, Height: 2560},
 }
 
+func findWorkingFFprobe(path string) string {
+	if path != "" {
+		if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
+			return path
+		}
+	}
+	if p, err := exec.LookPath("ffprobe"); err == nil {
+		return p
+	}
+	if runtime.GOOS == "darwin" {
+		for _, cand := range []string{
+			"/opt/homebrew/bin/ffprobe",
+			"/usr/local/bin/ffprobe",
+			"/opt/local/bin/ffprobe",
+			"/usr/bin/ffprobe",
+		} {
+			if fi, err := os.Stat(cand); err == nil && !fi.IsDir() {
+				return cand
+			}
+		}
+	}
+	return path
+}
+
 func ProbeAudioDuration(ffprobePath, audioPath string) (float64, error) {
-	cmd := exec.Command(ffprobePath,
+	resolvedPath := findWorkingFFprobe(ffprobePath)
+	if fi, err := os.Stat(resolvedPath); err != nil || fi.IsDir() {
+		hint := "Please ensure FFmpeg & FFprobe are installed and available in PATH."
+		if runtime.GOOS == "darwin" {
+			hint = "Install FFmpeg on your Mac by running: brew install ffmpeg"
+		}
+		return 0, fmt.Errorf("ffprobe not found at '%s' (%s)", ffprobePath, hint)
+	}
+
+	cmd := exec.Command(resolvedPath,
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "csv=p=0",

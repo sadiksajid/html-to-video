@@ -4,6 +4,9 @@ import (
 	"embed"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -16,6 +19,32 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+func getAppRootDir() string {
+	exe, err := os.Executable()
+	if err == nil {
+		exeDir := filepath.Dir(exe)
+		// On macOS, if inside an App bundle (.../ReelStudio.app/Contents/MacOS), root is Contents/MacOS
+		if runtime.GOOS == "darwin" && strings.Contains(exe, ".app/Contents/MacOS") {
+			return exeDir
+		}
+		// If third_party or worker exists next to exe, use exeDir
+		if _, err := os.Stat(filepath.Join(exeDir, "worker")); err == nil {
+			return exeDir
+		}
+		if _, err := os.Stat(filepath.Join(exeDir, "third_party")); err == nil {
+			return exeDir
+		}
+	}
+	wd, err := os.Getwd()
+	if err == nil && wd != "/" && wd != "" {
+		return wd
+	}
+	if err == nil && exe != "" {
+		return filepath.Dir(exe)
+	}
+	return "."
+}
+
 func main() {
 	// 1. Single instance lock
 	lock, acquired, err := app.AcquireSingleInstance("Local\\ReelStudioSingleInstanceMutex")
@@ -26,8 +55,8 @@ func main() {
 	}
 	defer lock.Release()
 
-	// 2. Initialize application
-	workDir, _ := os.Getwd()
+	// 2. Initialize application with robust root directory resolution
+	workDir := getAppRootDir()
 	application, err := app.NewApp(workDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize Reel Studio: %v", err)

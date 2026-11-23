@@ -57,31 +57,66 @@ func AcquireSingleInstance(name string) (*winapi.MutexLock, bool, error) {
 	return winapi.AcquireSingleInstance(name)
 }
 
+func init() {
+	if runtime.GOOS == "darwin" {
+		currentPath := os.Getenv("PATH")
+		extraPaths := []string{
+			"/opt/homebrew/bin",
+			"/opt/homebrew/sbin",
+			"/usr/local/bin",
+			"/usr/bin",
+			"/bin",
+			"/usr/sbin",
+			"/sbin",
+		}
+		for _, p := range extraPaths {
+			if !strings.Contains(currentPath, p) {
+				currentPath = p + ":" + currentPath
+			}
+		}
+		_ = os.Setenv("PATH", currentPath)
+	}
+}
+
 func resolveExecutable(rootDir, name string) string {
 	ext := ""
 	if runtime.GOOS == "windows" {
 		ext = ".exe"
 	}
 	target := name + ext
-	bundled := filepath.Join(rootDir, "third_party", target)
-	if _, err := os.Stat(bundled); err == nil {
-		return bundled
+
+	candidates := []string{
+		filepath.Join(rootDir, "third_party", target),
+		filepath.Join(rootDir, target),
 	}
-	// Check macOS App bundle Resources
+
 	if runtime.GOOS == "darwin" {
-		macBundle := filepath.Join(filepath.Dir(rootDir), "Resources", "third_party", target)
-		if _, err := os.Stat(macBundle); err == nil {
-			return macBundle
+		parent := filepath.Dir(rootDir)
+		candidates = append(candidates,
+			filepath.Join(parent, "Resources", "third_party", target),
+			filepath.Join(parent, "Resources", target),
+			filepath.Join("/opt/homebrew/bin", target),
+			filepath.Join("/usr/local/bin", target),
+			filepath.Join("/opt/local/bin", target),
+			filepath.Join("/usr/bin", target),
+		)
+	}
+
+	for _, cand := range candidates {
+		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() {
+			return cand
 		}
 	}
-	// Fallback to system PATH (e.g. Homebrew installed ffmpeg or node)
+
+	// Fallback to exec.LookPath
 	if p, err := exec.LookPath(target); err == nil {
 		return p
 	}
 	if p, err := exec.LookPath(name); err == nil {
 		return p
 	}
-	return bundled
+
+	return filepath.Join(rootDir, "third_party", target)
 }
 
 func NewApp(rootDir string) (*App, error) {
