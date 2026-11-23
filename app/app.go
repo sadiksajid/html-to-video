@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -47,6 +48,7 @@ type App struct {
 	settingsMgr *settings.Manager
 	supervisor  *worker.Supervisor
 	queueMgr    *jobs.QueueManager
+	nodePath    string
 	ffmpegPath  string
 	ffprobePath string
 }
@@ -55,15 +57,42 @@ func AcquireSingleInstance(name string) (*winapi.MutexLock, bool, error) {
 	return winapi.AcquireSingleInstance(name)
 }
 
+func resolveExecutable(rootDir, name string) string {
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+	target := name + ext
+	bundled := filepath.Join(rootDir, "third_party", target)
+	if _, err := os.Stat(bundled); err == nil {
+		return bundled
+	}
+	// Check macOS App bundle Resources
+	if runtime.GOOS == "darwin" {
+		macBundle := filepath.Join(filepath.Dir(rootDir), "Resources", "third_party", target)
+		if _, err := os.Stat(macBundle); err == nil {
+			return macBundle
+		}
+	}
+	// Fallback to system PATH (e.g. Homebrew installed ffmpeg or node)
+	if p, err := exec.LookPath(target); err == nil {
+		return p
+	}
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	return bundled
+}
+
 func NewApp(rootDir string) (*App, error) {
 	settingsMgr, err := settings.NewManager()
 	if err != nil {
 		return nil, fmt.Errorf("settings manager init failed: %w", err)
 	}
 
-	nodePath := filepath.Join(rootDir, "third_party", "node.exe")
-	ffmpegPath := filepath.Join(rootDir, "third_party", "ffmpeg.exe")
-	ffprobePath := filepath.Join(rootDir, "third_party", "ffprobe.exe")
+	nodePath := resolveExecutable(rootDir, "node")
+	ffmpegPath := resolveExecutable(rootDir, "ffmpeg")
+	ffprobePath := resolveExecutable(rootDir, "ffprobe")
 	workerScript := filepath.Join(rootDir, "worker", "render-worker.js")
 
 	supervisor := worker.NewSupervisor(nodePath, workerScript, rootDir)
@@ -72,6 +101,7 @@ func NewApp(rootDir string) (*App, error) {
 		rootDir:     rootDir,
 		settingsMgr: settingsMgr,
 		supervisor:  supervisor,
+		nodePath:    nodePath,
 		ffmpegPath:  ffmpegPath,
 		ffprobePath: ffprobePath,
 	}
@@ -275,6 +305,8 @@ func (a *App) CheckBrowserStatus() BrowserStatus {
 	edgePaths := []string{
 		`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`,
 		`C:\Program Files\Microsoft\Edge\Application\msedge.exe`,
+		`/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge`,
+		`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
 	}
 	edgeFound := false
 	for _, p := range edgePaths {
@@ -285,6 +317,10 @@ func (a *App) CheckBrowserStatus() BrowserStatus {
 	}
 
 	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		home, _ := os.UserHomeDir()
+		localAppData = filepath.Join(home, "Library", "Application Support")
+	}
 	chromDir := filepath.Join(localAppData, "ReelStudio", "browsers")
 	chromFound := false
 	if _, err := os.Stat(chromDir); err == nil {
@@ -308,7 +344,7 @@ func (a *App) GetDiagnostics() string {
 	sb.WriteString(fmt.Sprintf("Settings: Res=%s, FPS=%d, Quality=%s, MaxParallel=%d\n",
 		s.DefaultResolution, s.DefaultFps, s.DefaultQuality, s.MaxParallelRenders))
 	sb.WriteString(fmt.Sprintf("Binary Paths:\n  Node: %s\n  FFmpeg: %s\n  FFprobe: %s\n",
-		filepath.Join(a.rootDir, "third_party", "node.exe"), a.ffmpegPath, a.ffprobePath))
+		a.nodePath, a.ffmpegPath, a.ffprobePath))
 
 	sb.WriteString("\nRecent Worker Logs (Last 50 lines):\n")
 	for _, line := range a.supervisor.RecentLogs() {
